@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="mg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>RJP — Asa En Ligne</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#151f31; --card2:#1c2942; --line:#25344f;
+    --txt:#eef3ff; --muted:#93a3bd; --acc:#22c55e; --acc2:#38bdf8; --warn:#f59e0b;
+    --r:16px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  body{padding-bottom:78px}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:560px;margin:0 auto;padding:0 16px}
+
+  /* ---------- top bar ---------- */
+  header{position:sticky;top:0;z-index:20;background:rgba(11,18,32,.92);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:10px;padding:12px 16px;max-width:560px;margin:0 auto}
+  .logo{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:.4px}
+  .mark{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--acc),#0ea5e9);color:#04140a;font-weight:900;font-size:14px}
+  .who{margin-left:auto;font-size:12px;color:var(--muted);text-align:right;line-height:1.25}
+  .who b{display:block;color:var(--txt);font-size:13px}
+
+  /* ---------- hero ---------- */
+  .hero{padding:18px 0 6px}
+  h1{font-size:23px;line-height:1.22;margin:0 0 6px;letter-spacing:-.3px}
+  h1 span{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;
+    background-clip:text;color:transparent}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 14px;line-height:1.5}
+  .search{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:11px 13px}
+  .search input{flex:1;background:none;border:0;outline:none;color:var(--txt);font-size:14px}
+  .search input::placeholder{color:#6b7c96}
+
+  .stats{display:flex;gap:8px;margin:14px 0 4px}
+  .stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+  .stat b{display:block;font-size:16px}
+  .stat span{font-size:11px;color:var(--muted)}
+
+  /* ---------- chips ---------- */
+  .chips{display:flex;gap:8px;overflow-x:auto;padding:14px 0 6px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{white-space:nowrap;border:1px solid var(--line);background:var(--card);color:var(--muted);
+    padding:8px 13px;border-radius:999px;font-size:12.5px;font-weight:600}
+  .chip.on{background:var(--acc);border-color:var(--acc);color:#04140a}
+
+  /* ---------- job cards ---------- */
+  .job{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+    padding:14px;margin:10px 0;display:block;transition:transform .12s,border-color .12s}
+  .job:active{transform:scale(.985);border-color:#3a4f74}
+  .job .top{display:flex;gap:8px;align-items:flex-start}
+  .badge{font-size:10.5px;font-weight:700;padding:4px 8px;border-radius:7px;
+    background:rgba(34,197,94,.14);color:#7ee2a6;letter-spacing:.3px}
+  .badge.new{background:rgba(56,189,248,.14);color:#8fd7fb}
+  .job h3{font-size:15px;margin:9px 0 4px;line-height:1.3}
+  .job p{margin:0;color:var(--muted);font-size:12.5px;line-height:1.5}
+  .meta{display:flex;gap:12px;margin-top:10px;font-size:12px;color:#a9b8ce;flex-wrap:wrap}
+  .meta b{color:var(--acc);font-size:13px}
+
+  /* ---------- detail ---------- */
+  .back{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;
+    padding:10px 0;font-weight:600}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;margin:4px 0 14px}
+  .panel h2{margin:0 0 6px;font-size:19px;line-height:1.3}
+  .panel .pay{font-size:22px;font-weight:800;color:var(--acc);margin:10px 0 2px}
+  .panel .pay small{font-size:12px;color:var(--muted);font-weight:500}
+  ul.req{margin:12px 0 0;padding-left:18px;color:#c3cfe2;font-size:13px;line-height:1.75}
+  .label{font-size:11px;letter-spacing:.8px;color:var(--muted);font-weight:700;margin:16px 0 8px}
+
+  /* ---------- form ---------- */
+  input.f,textarea.f,select.f{width:100%;background:var(--card2);border:1px solid var(--line);
+    border-radius:12px;padding:13px 14px;color:var(--txt);font-size:14px;outline:none;margin-bottom:10px;
+    font-family:inherit}
+  input.f:focus,textarea.f:focus{border-color:var(--acc)}
+  .btn{width:100%;border:0;border-radius:14px;padding:15px;font-size:15px;font-weight:800;
+    background:linear-gradient(135deg,var(--acc),#16a34a);color:#04140a;letter-spacing:.2px}
+  .btn:active{opacity:.9}
+  .btn.ghost{background:none;border:1px solid var(--line);color:var(--muted);font-weight:600}
+  .err{color:#fca5a5;font-size:12px;margin:-4px 0 8px;display:none}
+
+  /* ---------- nav ---------- */
+  nav{position:fixed;left:0;right:0;bottom:0;z-index:30;background:rgba(13,21,36,.97);
+    border-top:1px solid var(--line);backdrop-filter:blur(14px);
+    padding-bottom:env(safe-area-inset-bottom)}
+  .navin{max-width:560px;margin:0 auto;display:flex}
+  .navin button{flex:1;background:none;border:0;color:#6b7c96;font-size:10.5px;font-weight:700;
+    padding:11px 0 13px;display:grid;gap:3px;justify-items:center;letter-spacing:.3px}
+  .navin button .ic{font-size:18px;line-height:1}
+  .navin button.on{color:var(--acc)}
+
+  .empty{text-align:center;color:var(--muted);font-size:13px;padding:40px 20px;line-height:1.7}
+  .ok{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);color:#a7f3c0;
+    border-radius:14px;padding:14px;font-size:13px;line-height:1.6;margin:10px 0}
+  .page{display:none}.page.on{display:block}
+  .tag{display:inline-block;font-size:11px;color:#a9b8ce;background:var(--card2);
+    border:1px solid var(--line);border-radius:999px;padding:4px 10px;margin:0 6px 6px 0}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <div class="logo"><div class="mark">RJP</div><span>ASA EN LIGNE</span></div>
+    <div class="who" id="who" style="display:none"><b id="whoName"></b><span id="whoPhone"></span></div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ ACCUEIL ============ -->
+  <section class="page on" id="p-home">
+    <div class="hero">
+      <h1>Mahita <span>asa en ligne</span> mora sy haingana</h1>
+      <p class="sub">Asa azo atao amin'ny telephone, na aiza na aiza any Madagasikara.</p>
+      <div class="search">
+        <span>🔍</span>
+        <input id="q" placeholder="Hitady asa : fandikana, saisie, marketing…">
+      </div>
+      <div class="stats">
+        <div class="stat"><b id="sJobs">0</b><span>asa misy</span></div>
+        <div class="stat"><b id="sCand">0</b><span>candidatures</span></div>
+        <div class="stat"><b id="sAr">0 Ar</b><span>total mety ho azo</span></div>
+      </div>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div id="list"></div>
+  </section>
+
+  <!-- ============ DETAIL ============ -->
+  <section class="page" id="p-job">
+    <div class="back" onclick="go('home')">‹ Miverina</div>
+    <div class="panel" id="jobPanel"></div>
+  </section>
+
+  <!-- ============ CANDIDATURES ============ -->
+  <section class="page" id="p-cand">
+    <div class="hero"><h1>Ny <span>candidatures</span>-ko</h1>
+      <p class="sub">Izay asa nangatahanao dia hita eto.</p></div>
+    <div id="candList"></div>
+  </section>
+
+  <!-- ============ PROFIL ============ -->
+  <section class="page" id="p-profile">
+    <div class="hero"><h1>Ny <span>profil</span>-ko</h1>
+      <p class="sub">Fenoy ny mombamomba anao mba ho mora ny fifandraisana.</p></div>
+    <div class="panel">
+      <div class="label">ANARANA</div>
+      <input class="f" id="fName" placeholder="Anaranao feno">
+      <div class="label">LAHARANA FINDAY</div>
+      <input class="f" id="fPhone" inputmode="tel" placeholder="034 12 345 67">
+      <div class="label">ASA TIANAO</div>
+      <input class="f" id="fSkill" placeholder="Oh: fandikana teny, saisie, marketing">
+      <div class="label">FAMPIANARANA</div>
+      <textarea class="f" id="fAbout" rows="3" placeholder="Lazao kely ny traikefanao"></textarea>
+      <div class="err" id="errP">Fenoy ny anarana sy ny laharana finday.</div>
+      <button class="btn" onclick="saveProfile()">Tehirizo</button>
+      <div id="profOk"></div>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <div class="navin">
+    <button class="on" data-tab="home" onclick="go('home')"><span class="ic">🏠</span>Accueil</button>
+    <button data-tab="cand" onclick="go('cand')"><span class="ic">📨</span>Candidatures</button>
+    <button data-tab="profile" onclick="go('profile')"><span class="ic">👤</span>Profil</button>
+  </div>
+</nav>
+
+<script>
+/* ---------------- données ---------------- */
+var JOBS = [
+  {id:1, t:"Mpandika teny frantsay–malagasy", cat:"Fandikana", pay:450000, unit:"isan-dahatsoratra 20",
+   d:"Mila olona mandika antontan-taratasy frantsay mankany amin'ny teny malagasy. Asa an-trano, fe-potoana 5 andro.",
+   req:["Tsara ny teny frantsay sy malagasy","Mahay mandefa email","24 ora ny fifandraisana"], tag:"Vaovao", isNew:true},
+  {id:2, t:"Saisie de données — 500 laharana", cat:"Saisie", pay:180000, unit:"isan-tapitrisa",
+   d:"Fenoy ny tabilao Excel miaraka amin'ny anarana, finday ary adiresy. Omena template sy fanazavana.",
+   req:["Mahay Excel na Google Sheets","Internet tsara","Haingana sy marina"], tag:"Mora", isNew:false},
+  {id:3, t:"Community manager — pejy Facebook", cat:"Marketing", pay:600000, unit:"isan-volana",
+   d:"Hitantana pejy Facebook misy mpanaraka 30 000 : famoahana lahatsoratra, valin-teny, fandaminana.",
+   req:["Traikefa amin'ny Facebook","Mahay manao sary tsotra (Canva)","Asa 2 ora isan'andro"], tag:"Maharitra", isNew:false},
+  {id:4, t:"Mpanamboatra visuel (Canva)", cat:"Design", pay:250000, unit:"isan-visuel 30",
+   d:"Mamorona afisy sy sary ho an'ny dokambarotra. Omena ny lohahevitra sy ny sary fototra.",
+   req:["Mahay Canva na Photoshop","Fanandramana tsara amin'ny loko","Fanajana ny fe-potoana"], tag:"Vaovao", isNew:true},
+  {id:5, t:"Mpanao site vitrine (HTML/CSS)", cat:"Développement", pay:1200000, unit:"isan-projet",
+   d:"Site pejy 5 : fandraisana, momba, serivisy, galerie, fifandraisana. Responsive amin'ny finday.",
+   req:["Mahay HTML/CSS/JS","Namita projet 2 farafahakeliny","Mba asio rohy fanoharana"], tag:"Projet", isNew:false},
+  {id:6, t:"Mpandrindra forum WhatsApp", cat:"Modération", pay:150000, unit:"isan-volana",
+   d:"Hikarakara vondrona WhatsApp : fandraisana mpikambana, fanadiovana spam, famaliana fanontaniana.",
+   req:["Malina sy mahay mifandray","Mahay teny malagasy sy frantsay","Tsy miangatra"], tag:"Mora", isNew:false},
+  {id:7, t:"Mpanao lahatsoratra (blog)", cat:"Rédaction", pay:300000, unit:"isan-lahatsoratra 10",
+   d:"Fanolorana lahatsoratra 500 teny momba ny fiainana andavanandro eto Madagasikara.",
+   req:["Fanoratra mazava","Fikarohana tsara","Tsy mandika an-tsoratra"], tag:"Vaovao", isNew:true},
+  {id:8, t:"Montage vidéo courte (Reels)", cat:"Vidéo", pay:500000, unit:"isan-vidéo 8",
+   d:"Fanamboarana vidéo 30 segondra ho an'ny tambajotra. Omena ny sarimihetsika fototra.",
+   req:["Mahay CapCut","Mahay manao sous-titre","Creative"], tag:"Projet", isNew:false}
+];
+var CATS = ["Tous","Fandikana","Saisie","Marketing","Design","Développement","Modération","Rédaction","Vidéo"];
+var state = {cat:"Tous", q:"", job:null, cands:[], profile:{}};
+
+/* ---------------- stockage ---------------- */
+function load(){
+  try{
+    state.cands = JSON.parse(localStorage.getItem("rjp_cands")||"[]");
+    state.profile = JSON.parse(localStorage.getItem("rjp_profile")||"{}");
+  }catch(e){}
+}
+function save(){
+  try{
+    localStorage.setItem("rjp_cands", JSON.stringify(state.cands));
+    localStorage.setItem("rjp_profile", JSON.stringify(state.profile));
+  }catch(e){}
+}
+
+/* ---------------- navigation ---------------- */
+function go(p){
+  document.querySelectorAll(".page").forEach(function(s){s.classList.remove("on")});
+  document.getElementById("p-"+p).classList.add("on");
+  document.querySelectorAll(".navin button").forEach(function(b){
+    b.classList.toggle("on", b.dataset.tab===p);
+  });
+  if(p==="cand") renderCands();
+  if(p==="profile") fillProfile();
+  window.scrollTo({top:0,behavior:"instant"});
+}
+
+/* ---------------- liste ---------------- */
+function money(n){ return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g," ")+" Ar"; }
+
+function renderChips(){
+  var c = document.getElementById("chips");
+  c.innerHTML = CATS.map(function(x){
+    return '<button class="chip'+(state.cat===x?" on":"")+'" onclick="setCat(\''+x+'\')">'+x+'</button>';
+  }).join("");
+}
+function setCat(x){ state.cat=x; renderChips(); renderList(); }
+
+function renderList(){
+  var q = state.q.toLowerCase();
+  var items = JOBS.filter(function(j){
+    var okCat = state.cat==="Tous" || j.cat===state.cat;
+    var okQ = !q || (j.t+" "+j.d+" "+j.cat).toLowerCase().indexOf(q)>=0;
+    return okCat && okQ;
+  });
+  var el = document.getElementById("list");
+  if(!items.length){ el.innerHTML = '<div class="empty">Tsy misy asa mifanaraka amin\'izay tadiavinao.<br>Andramo teny hafa.</div>'; }
+  else{
+    el.innerHTML = items.map(function(j){
+      return '<div class="job" onclick="openJob('+j.id+')">'
+        + '<div class="top"><span class="badge'+(j.isNew?" new":"")+'">'+j.cat+(j.isNew?" • Vaovao":"")+'</span></div>'
+        + '<h3>'+j.t+'</h3>'
+        + '<p>'+j.d.slice(0,96)+'…</p>'
+        + '<div class="meta"><span><b>'+money(j.pay)+'</b> / '+j.unit+'</span><span>🌍 An-trano</span></div>'
+        + '</div>';
+    }).join("");
+  }
+  document.getElementById("sJobs").textContent = JOBS.length;
+  document.getElementById("sCand").textContent = state.cands.length;
+  document.getElementById("sAr").textContent = money(JOBS.reduce(function(a,b){return a+b.pay},0)).replace(" Ar"," Ar");
+}
+
+/* ---------------- détail + candidature ---------------- */
+function openJob(id){
+  var j = JOBS.filter(function(x){return x.id===id})[0];
+  state.job = j;
+  var done = state.cands.some(function(c){return c.id===id});
+  document.getElementById("jobPanel").innerHTML =
+    '<span class="badge'+(j.isNew?" new":"")+'">'+j.cat+'</span>'
+    + '<h2>'+j.t+'</h2>'
+    + '<p class="sub" style="margin-bottom:0">'+j.d+'</p>'
+    + '<div class="pay">'+money(j.pay)+' <small>/ '+j.unit+'</small></div>'
+    + '<div class="label">FEPETRA</div>'
+    + '<div>'+j.req.map(function(r){return '<span class="tag">'+r+'</span>'}).join("")+'</div>'
+    + (done
+        ? '<div class="ok">Efa nangataka an\'ity asa ity ianao. Hifandray aminao ny mpampiasa rehefa mifidy.</div>'
+        : '<div class="label">MANGATAKA ITY ASA ITY</div>'
+          + '<input class="f" id="cName" placeholder="Anaranao">'
+          + '<input class="f" id="cPhone" inputmode="tel" placeholder="Laharana finday (034 12 345 67)">'
+          + '<textarea class="f" id="cMsg" rows="3" placeholder="Antony tokony hofidina ianao (tsy voatery)"></textarea>'
+          + '<div class="err" id="errC">Fenoy ny anarana sy ny laharana finday.</div>'
+          + '<button class="btn" onclick="apply('+j.id+')">Alefa ny candidature</button>')
+    + '<div style="height:8px"></div>'
+    + '<button class="btn ghost" onclick="go(\'home\')">Miverina amin\'ny lisitra</button>';
+  var p = state.profile;
+  if(p.name) { var n=document.getElementById("cName"); if(n) n.value=p.name; }
+  if(p.phone){ var f=document.getElementById("cPhone"); if(f) f.value=p.phone; }
+  go("job");
+}
+
+function apply(id){
+  var n = document.getElementById("cName").value.trim();
+  var p = document.getElementById("cPhone").value.trim();
+  var m = document.getElementById("cMsg").value.trim();
+  var e = document.getElementById("errC");
+  if(n.length<2 || p.replace(/\D/g,"").length<9){ e.style.display="block"; return; }
+  e.style.display="none";
+  state.cands.push({id:id, name:n, phone:p, msg:m, date:new Date().toISOString()});
+  state.profile = {name:n, phone:p, skill:(state.profile.skill||""), about:(state.profile.about||"")};
+  save();
+  renderList(); openJob(id);
+  document.getElementById("who").style.display="block";
+  document.getElementById("whoName").textContent = n;
+  document.getElementById("whoPhone").textContent = p;
+}
+
+/* ---------------- candidatures ---------------- */
+function renderCands(){
+  var el = document.getElementById("candList");
+  if(!state.cands.length){
+    el.innerHTML = '<div class="empty">Tsy mbola nisy candidature.<br>Mankanesa amin\'ny lisitry ny asa ka mifidiana.</div>';
+    return;
+  }
+  el.innerHTML = state.cands.slice().reverse().map(function(c){
+    var j = JOBS.filter(function(x){return x.id===c.id})[0];
+    return '<div class="job"><div class="top"><span class="badge">Nalefa</span></div>'
+      + '<h3>'+(j?j.t:"Asa")+'</h3>'
+      + '<p>'+c.name+' • '+c.phone+'</p>'
+      + '<div class="meta"><span>'+(j?money(j.pay):"")+'</span><span>'+new Date(c.date).toLocaleDateString("fr-FR")+'</span></div></div>';
+  }).join("");
+}
+
+/* ---------------- profil ---------------- */
+function fillProfile(){
+  var p = state.profile;
+  document.getElementById("fName").value = p.name||"";
+  document.getElementById("fPhone").value = p.phone||"";
+  document.getElementById("fSkill").value = p.skill||"";
+  document.getElementById("fAbout").value = p.about||"";
+}
+function saveProfile(){
+  var n = document.getElementById("fName").value.trim();
+  var ph = document.getElementById("fPhone").value.trim();
+  if(n.length<2 || ph.replace(/\D/g,"").length<9){
+    document.getElementById("errP").style.display="block"; return;
+  }
+  document.getElementById("errP").style.display="none";
+  state.profile = {name:n, phone:ph,
+    skill:document.getElementById("fSkill").value.trim(),
+    about:document.getElementById("fAbout").value.trim()};
+  save();
+  document.getElementById("who").style.display="block";
+  document.getElementById("whoName").textContent = n;
+  document.getElementById("whoPhone").textContent = ph;
+  document.getElementById("profOk").innerHTML = '<div class="ok">Voatahiry ny mombamomba anao ✔</div>';
+}
+
+/* ---------------- init ---------------- */
+document.getElementById("q").addEventListener("input", function(e){
+  state.q = e.target.value; renderList();
+});
+load(); renderChips(); renderList();
+if(state.profile.name){
+  document.getElementById("who").style.display="block";
+  document.getElementById("whoName").textContent = state.profile.name;
+  document.getElementById("whoPhone").textContent = state.profile.phone || "";
+}
+</script>
+</body>
+</html>
