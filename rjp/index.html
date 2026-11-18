@@ -3,7 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0f172a">
+<meta name="theme-color" content="#0b1220">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>RJP — Asa En Ligne</title>
 <style>
   :root{
@@ -357,6 +362,36 @@ document.getElementById("q").addEventListener("input", function(e){
   state.q = e.target.value; renderList();
 });
 load(); renderChips(); renderList();
+
+// ---- hors ligne : service worker ----
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").then(function(){
+    console.log("SW prêt : l'app fonctionne hors ligne");
+  }).catch(function(e){ console.log("SW indisponible", e); });
+}
+function netState(){
+  var off = !navigator.onLine;
+  var el = document.getElementById("netTag");
+  if(!el){
+    el = document.createElement("div");
+    el.id = "netTag";
+    el.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:86px;z-index:40;"+
+      "font-size:11px;font-weight:700;padding:6px 12px;border-radius:999px;display:none";
+    document.body.appendChild(el);
+  }
+  if(off){
+    el.style.display = "block";
+    el.style.background = "rgba(245,158,11,.15)";
+    el.style.color = "#fbbf24";
+    el.style.border = "1px solid rgba(245,158,11,.4)";
+    el.textContent = "Hors ligne — ny angonao dia voatahiry";
+  } else {
+    el.style.display = "none";
+  }
+}
+window.addEventListener("online", netState);
+window.addEventListener("offline", netState);
+netState();
 if(state.profile.name){
   document.getElementById("who").style.display="block";
   document.getElementById("whoName").textContent = state.profile.name;
