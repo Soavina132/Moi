@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0d1b14">
+<title>Sauver la Fille du Maire — Madagascar</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:#08110c;overflow:hidden;height:100%;
+    font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;touch-action:none;background:#0d1b14}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<script>
+"use strict";
+var cv = document.getElementById("c"), ctx = cv.getContext("2d");
+var VW = 960, VH = 540;              // résolution logique
+var scale = 1, offX = 0, offY = 0;
+
+function resize(){
+  var w = window.innerWidth, h = window.innerHeight;
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.floor(w * dpr); cv.height = Math.floor(h * dpr);
+  cv.style.width = w + "px"; cv.style.height = h + "px";
+  scale = Math.min(w / VW, h / VH);
+  offX = (w - VW * scale) / 2; offY = (h - VH * scale) / 2;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener("resize", resize);
+
+/* ===================== ÉTAT ===================== */
+var G = {
+  scene: "intro",     // intro | play | levelup | gameover | ending
+  panel: 0,
+  level: 1,
+  lives: 3,
+  score: 0,
+  t: 0,
+  msg: "",
+  flash: 0
+};
+
+var STORY = [
+  { who: "Toamasina, Madagascar", txt: "Un petit village au bord des rizières. Les poules picorent, les zébus ruminent.", art: "village" },
+  { who: "Tovo", txt: "Je m'appelle Tovo. Noro, la fille du Maire, est mon amie d'enfance.", art: "tovo" },
+  { who: "Noro", txt: "Ce soir-là, un homme en moto est arrivé. Casque noir, visage caché.", art: "noro" },
+  { who: "Le Maire", txt: "« Tovo, sauve ma fille. Je n'ai que toi. Ramène-la et je te donnerai tout ce que tu veux. »", art: "maire" }
+];
+
+var LEVELS = [
+  { id: 1, name: "Le village", hint: "Cours et évite les chiens. La policière te poursuit !", mode: "run",
+    sky: "#7ec8e3", ground: "#6f9b3f", road: "#a8834f", length: 5200, speed: 250, target: "La moto du Kidnappeur" },
+  { id: 2, name: "La route vers Toamasina", hint: "Conduis le taxi-be et rattrape la moto.", mode: "drive",
+    sky: "#f3b26b", ground: "#8a7a4a", road: "#4a4a4f", length: 6200, speed: 330, target: "La moto du Kidnappeur" },
+  { id: 3, name: "Le marché Bazary", hint: "Cache-toi derrière les étals. La police de la ville te cherche.", mode: "stealth",
+    sky: "#5f7f9e", ground: "#7c6a4a", road: "#5b4a34", length: 5600, speed: 210, target: "La maison du Patron" },
+  { id: 4, name: "Le port", hint: "Pirogue puis bateau rapide : poursuis le Patron sur la mer.", mode: "boat",
+    sky: "#63b7d6", ground: "#1f6f8b", road: "#2c8fae", length: 6400, speed: 300, target: "Le bateau du Patron" },
+  { id: 5, name: "L'aéroport", hint: "Décolle et rattrape l'hélicoptère du Patron.", mode: "fly",
+    sky: "#8fb8d8", ground: "#5b7a4a", road: "#8a8a92", length: 7000, speed: 360, target: "L'hélicoptère du Patron" }
+];
+
+var P, W, obs, clouds, dogs, cop, target, cam, particles;
+
+/* ===================== ENTRÉES ===================== */
+var keys = {}, touch = { left: false, right: false, up: false };
+window.addEventListener("keydown", function(e){
+  keys[e.key] = true;
+  if([" ", "ArrowUp", "ArrowLeft", "ArrowRight", "ArrowDown"].indexOf(e.key) >= 0) e.preventDefault();
+  if(e.key === "Enter" || e.key === " ") advance();
+});
+window.addEventListener("keyup", function(e){ keys[e.key] = false; });
+
+function pt(e){
+  var r = cv.getBoundingClientRect();
+  var t = e.touches ? e.touches[0] : e;
+  return { x: (t.clientX - r.left - offX) / scale, y: (t.clientY - r.top - offY) / scale };
+}
+function hit(p, b){ return p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h; }
+
+var BTN = {
+  left:  { x: 26,  y: 430, w: 96, h: 96 },
+  right: { x: 140, y: 430, w: 96, h: 96 },
+  up:    { x: 838, y: 430, w: 96, h: 96 }
+};
+
+function onDown(e){
+  e.preventDefault();
+  var p = pt(e);
+  if(G.scene !== "play"){ advance(); return; }
+  if(hit(p, BTN.left)) touch.left = true;
+  if(hit(p, BTN.right)) touch.right = true;
+  if(hit(p, BTN.up)) touch.up = true;
+}
+function onUp(e){
+  if(e.touches && e.touches.length) return;
+  touch.left = touch.right = touch.up = false;
+}
+cv.addEventListener("touchstart", onDown, { passive: false });
+cv.addEventListener("touchmove", function(e){ e.preventDefault(); }, { passive: false });
+cv.addEventListener("touchend", onUp);
+cv.addEventListener("touchcancel", onUp);
+cv.addEventListener("mousedown", onDown);
+cv.addEventListener("mouseup", onUp);
+
+function advance(){
+  if(G.scene === "intro"){
+    G.panel++;
+    if(G.panel >= STORY.length){ startLevel(1); }
+  } else if(G.scene === "levelup"){
+    if(G.level >= 5){ G.scene = "ending"; G.panel = 0; }
+    else startLevel(G.level + 1);
+  } else if(G.scene === "gameover"){
+    G.lives = 3; G.score = 0; startLevel(G.level);
+  } else if(G.scene === "ending"){
+    G.scene = "intro"; G.panel = 0; G.level = 1; G.lives = 3; G.score = 0;
+  }
+}
+
+/* ===================== NIVEAU ===================== */
+function startLevel(n){
+  G.level = n; G.scene = "play"; G.t = 0; G.msg = "";
+  var L = LEVELS[n - 1];
+  P = { x: 220, y: 0, vy: 0, onGround: true, speed: 0, hurt: 0, anim: 0, mode: L.mode };
+  G.flash = 0;
+  W = { x: 0, len: L.length };
+  cam = { x: 0 };
+  obs = []; clouds = []; dogs = []; particles = [];
+  cop = { x: -420, y: 0, anim: 0, active: n === 1 || n === 3 };
+  target = { x: L.length - 700, escaped: false, anim: 0 };
+
+  // décor
+  for(var i = 0; i < 26; i++){
+    clouds.push({ x: Math.random() * L.length, y: 40 + Math.random() * 150, s: 0.5 + Math.random() * 0.9 });
+  }
+  // obstacles
+  var count = Math.floor(L.length / 260);
+  for(var j = 0; j < count; j++){
+    var ox = 700 + j * 240 + Math.random() * 90;
+    var type = "rock";
+    if(n === 1) type = Math.random() < 0.5 ? "dog" : "rice";
+    else if(n === 2) type = Math.random() < 0.6 ? "car" : "pothole";
+    else if(n === 3) type = Math.random() < 0.5 ? "stall" : "cop";
+    else if(n === 4) type = Math.random() < 0.5 ? "wave" : "buoy";
+    else type = Math.random() < 0.5 ? "bird" : "tower";
+    var HY = { dog: -20, rice: -20, rock: -18, car: -25, pothole: -42, stall: -30,
+               cop: -50, wave: -35, buoy: -30, bird: -150, tower: -80 };
+    obs.push({ x: ox, type: type, hy: HY[type] || -20, hit: false, phase: Math.random() * 6.28 });
+  }
+  if(n === 1){
+    for(var k = 0; k < 6; k++) dogs.push({ x: 900 + k * 620 + Math.random() * 200, y: 0, anim: Math.random() * 6 });
+  }
+}
+
+/* ===================== LOGIQUE ===================== */
+function groundY(){ return 400; }
+
+function step(dt){
+  G.t += dt;
+  if(G.scene !== "play") return;
+  var L = LEVELS[G.level - 1];
+
+  var fast = keys["ArrowRight"] || keys["d"] || touch.right;
+  var slow = keys["ArrowLeft"] || keys["a"] || touch.left;
+  var jump = keys["ArrowUp"] || keys["w"] || keys[" "] || touch.up;
+
+  var base = L.speed + G.t * 5;
+  P.speed = base * (fast ? 1.45 : (slow ? 0.55 : 1));
+  W.x += P.speed * dt;
+
+  // saut / altitude
+  if(P.mode === "run" || P.mode === "stealth"){
+    if(jump && P.onGround){ P.vy = -760; P.onGround = false; }
+    P.vy += 2100 * dt;
+    P.y += P.vy * dt;
+    if(P.y >= 0){ P.y = 0; P.vy = 0; P.onGround = true; }
+  } else if(P.mode === "fly"){
+    if(jump) P.y = Math.max(-150, P.y - 320 * dt);
+    else P.y = Math.min(90, P.y + 240 * dt);
+  } else {
+    if(jump) P.y = Math.max(-40, P.y - 260 * dt);
+    else P.y = Math.min(0, P.y + 200 * dt);
+  }
+  P.anim += dt * (4 + P.speed / 90);
+
+  // caméra
+  cam.x = W.x - 220;
+
+  // obstacles
+  obs.forEach(function(o){
+    var sx = o.x - cam.x;
+    if(sx < -200 || sx > VW + 200) return;
+    if(!o.hit && sx < 300 && sx > 180){
+      var dv = Math.abs((P.y - 40) - o.hy);
+      if(dv < 52 && Math.abs(sx - 220) < 44){ o.hit = true; damage(); }
+    }
+  });
+
+  // chiens
+  dogs.forEach(function(d){
+    d.anim += dt * 8;
+    var sx = d.x - cam.x;
+    if(!d.done && sx < 300 && sx > 170 && Math.abs(P.y - 40 + 20) < 52){
+      d.done = true; damage();
+    }
+  });
+
+  // policière qui poursuit
+  if(cop.active){
+    var gap = 420 - Math.min(240, G.t * 9);
+    cop.x = cam.x - gap;
+    cop.anim += dt * 10;
+    if(gap < 210 && P.speed < L.speed * 0.8) damage(true);
+  }
+
+  // cible
+  var dist = target.x - W.x;
+  if(dist <= 40){
+    G.score += 500 * G.level;
+    G.lives = Math.min(3, G.lives + 1);
+    G.scene = "levelup";
+    G.msg = "";
+    for(var i = 0; i < 24; i++){
+      particles.push({ x: 220, y: groundY() - 40, vx: (Math.random() - 0.5) * 300,
+        vy: -Math.random() * 300, life: 1 });
+    }
+  }
+  if(W.x > L.length - 60){ G.scene = "gameover"; G.msg = "Trop lent : la piste est perdue."; }
+
+  particles.forEach(function(p){
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 700 * dt; p.life -= dt * 0.9;
+  });
+  particles = particles.filter(function(p){ return p.life > 0; });
+
+  if(P.hurt > 0) P.hurt -= dt;
+  if(G.flash > 0) G.flash -= dt * 2;
+}
+
+function damage(chase){
+  if(P.hurt > 0) return;
+  P.hurt = 1.4;
+  G.lives--;
+  G.flash = 1;
+  if(G.lives <= 0){
+    G.scene = "gameover";
+    G.msg = chase ? "La policière t'a rattrapé." : "Tu es tombé.";
+  }
+}
+
+/* ===================== DESSIN ===================== */
+function roundRect(x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/* ---- personnages ---- */
+function drawTovo(x, y, t, run){
+  ctx.save(); ctx.translate(x, y);
+  var bob = Math.sin(t * 2) * 2;
+  // jambes
+  var sw = Math.sin(t * 9) * (run ? 14 : 3);
+  ctx.strokeStyle = "#3b2a1c"; ctx.lineWidth = 9; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-5, -34); ctx.lineTo(-5 + sw, 0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(5, -34); ctx.lineTo(5 - sw, 0); ctx.stroke();
+  // short
+  ctx.fillStyle = "#1f4d8f"; roundRect(-13, -52 + bob, 26, 22, 5); ctx.fill();
+  // torse
+  ctx.fillStyle = "#d93a3a"; roundRect(-14, -88 + bob, 28, 40, 8); ctx.fill();
+  // bras
+  ctx.strokeStyle = "#8a5a34"; ctx.lineWidth = 7;
+  ctx.beginPath(); ctx.moveTo(-12, -80 + bob); ctx.lineTo(-16 - sw * 0.5, -56 + bob); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(12, -80 + bob); ctx.lineTo(16 + sw * 0.5, -56 + bob); ctx.stroke();
+  // tête
+  ctx.fillStyle = "#8a5a34"; ctx.beginPath(); ctx.arc(0, -104 + bob, 16, 0, 7); ctx.fill();
+  ctx.fillStyle = "#241a12"; ctx.beginPath(); ctx.arc(0, -112 + bob, 16, Math.PI, 0); ctx.fill();
+  // yeux
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-5, -104 + bob, 3.4, 0, 7); ctx.arc(6, -104 + bob, 3.4, 0, 7); ctx.fill();
+  ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(-4, -104 + bob, 1.7, 0, 7); ctx.arc(7, -104 + bob, 1.7, 0, 7); ctx.fill();
+  ctx.restore();
+}
+
+function drawNoro(x, y, t){
+  ctx.save(); ctx.translate(x, y);
+  var bob = Math.sin(t * 2) * 1.6;
+  ctx.strokeStyle = "#c99a6b"; ctx.lineWidth = 7; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-4, -30); ctx.lineTo(-4, 0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(4, -30); ctx.lineTo(4, 0); ctx.stroke();
+  // lamba malgache
+  var g = ctx.createLinearGradient(-16, -80, 16, -30);
+  g.addColorStop(0, "#e94f7c"); g.addColorStop(0.5, "#f2b33d"); g.addColorStop(1, "#e94f7c");
+  ctx.fillStyle = g; roundRect(-17, -78 + bob, 34, 50, 8); ctx.fill();
+  // cheveux longs
+  ctx.fillStyle = "#221610";
+  ctx.beginPath(); ctx.ellipse(0, -92 + bob, 19, 20, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-16, -70 + bob, 8, 26, 0.15, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(16, -70 + bob, 8, 26, -0.15, 0, 7); ctx.fill();
+  // visage
+  ctx.fillStyle = "#d8a97a"; ctx.beginPath(); ctx.arc(0, -92 + bob, 15, 0, 7); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-5, -93 + bob, 3, 0, 7); ctx.arc(5, -93 + bob, 3, 0, 7); ctx.fill();
+  ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(-5, -93 + bob, 1.6, 0, 7); ctx.arc(5, -93 + bob, 1.6, 0, 7); ctx.fill();
+  ctx.strokeStyle = "#a4472f"; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.arc(0, -85 + bob, 5, 0.2, Math.PI - 0.2); ctx.stroke();
+  ctx.restore();
+}
+
+function drawKidnapper(x, y, t, moto){
+  ctx.save(); ctx.translate(x, y);
+  if(moto){
+    ctx.fillStyle = "#1a1a1a"; ctx.beginPath(); ctx.arc(-24, -12, 13, 0, 7); ctx.arc(26, -12, 13, 0, 7); ctx.fill();
+    ctx.fillStyle = "#333"; roundRect(-30, -30, 60, 16, 6); ctx.fill();
+    ctx.fillStyle = "#b33"; roundRect(-8, -44, 22, 10, 4); ctx.fill();
+  }
+  // corps
+  ctx.fillStyle = "#2b2b33"; roundRect(-14, -84, 28, 42, 7); ctx.fill();
+  ctx.strokeStyle = "#1a1a1a"; ctx.lineWidth = 8; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-6, -42); ctx.lineTo(-8, -10); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(6, -42); ctx.lineTo(10, -10); ctx.stroke();
+  // casque
+  ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(0, -96, 18, 0, 7); ctx.fill();
+  ctx.fillStyle = "#3a6ea5"; ctx.beginPath(); ctx.ellipse(4, -96, 12, 7, 0, 0, 7); ctx.fill();
+  ctx.restore();
+}
+
+function drawPatron(x, y, t){
+  ctx.save(); ctx.translate(x, y);
+  ctx.fillStyle = "#20242e"; roundRect(-22, -92, 44, 54, 10); ctx.fill();     // costume
+  ctx.fillStyle = "#f2f2f2"; ctx.beginPath();
+  ctx.moveTo(-8, -92); ctx.lineTo(0, -70); ctx.lineTo(8, -92); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#8e2b2b"; roundRect(-4, -88, 8, 20, 2); ctx.fill();          // cravate
+  ctx.strokeStyle = "#16181d"; ctx.lineWidth = 10; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-10, -40); ctx.lineTo(-12, 0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(10, -40); ctx.lineTo(12, 0); ctx.stroke();
+  ctx.fillStyle = "#d8a97a"; ctx.beginPath(); ctx.arc(0, -110, 18, 0, 7); ctx.fill();
+  ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(0, -116, 18, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = "#0b0b0b"; roundRect(-14, -114, 28, 11, 4); ctx.fill();       // lunettes
+  ctx.restore();
+}
+
+function drawCop(x, y, t, run){
+  ctx.save(); ctx.translate(x, y);
+  var sw = Math.sin(t * 10) * (run ? 15 : 4);
+  ctx.strokeStyle = "#1b2a4a"; ctx.lineWidth = 9; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-5, -34); ctx.lineTo(-5 + sw, 0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(5, -34); ctx.lineTo(5 - sw, 0); ctx.stroke();
+  ctx.fillStyle = "#25406e"; roundRect(-14, -88, 28, 56, 7); ctx.fill();
+  ctx.fillStyle = "#e8c14a"; roundRect(-14, -66, 28, 5, 2); ctx.fill();
+  ctx.strokeStyle = "#c99a6b"; ctx.lineWidth = 7;
+  ctx.beginPath(); ctx.moveTo(-12, -80); ctx.lineTo(-18 - sw * 0.4, -58); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(12, -80); ctx.lineTo(18 + sw * 0.4, -58); ctx.stroke();
+  ctx.fillStyle = "#c99a6b"; ctx.beginPath(); ctx.arc(0, -104, 15, 0, 7); ctx.fill();
+  ctx.fillStyle = "#1b2a4a"; ctx.beginPath(); ctx.arc(0, -110, 16, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = "#e8c14a"; roundRect(-12, -114, 24, 6, 3); ctx.fill();      // casquette
+  ctx.restore();
+}
+
+/* ---- décor ---- */
+function drawSky(L, night){
+  var g = ctx.createLinearGradient(0, 0, 0, VH);
+  if(G.level === 4){ g.addColorStop(0, "#8fd3ea"); g.addColorStop(1, "#2c8fae"); }
+  else if(G.level === 2){ g.addColorStop(0, "#f7c27a"); g.addColorStop(1, "#e08b4a"); }
+  else if(G.level === 5){ g.addColorStop(0, "#9cc6e8"); g.addColorStop(1, "#cfe6f5"); }
+  else { g.addColorStop(0, L.sky); g.addColorStop(1, "#cfe9f5"); }
+  ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
+  // soleil
+  ctx.fillStyle = "rgba(255,240,180,0.9)";
+  ctx.beginPath(); ctx.arc(760, 90, 42, 0, 7); ctx.fill();
+  // nuages
+  clouds.forEach(function(c){
+    var x = ((c.x - cam.x * 0.35) % (VW + 400)) - 200;
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.beginPath(); ctx.ellipse(x, c.y, 46 * c.s, 15 * c.s, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + 30 * c.s, c.y + 4, 28 * c.s, 11 * c.s, 0, 0, 7); ctx.fill();
+  });
+}
+
+function drawHills(){
+  ctx.fillStyle = G.level === 4 ? "#1f6f8b" : "#5c8f4a";
+  for(var i = 0; i < 12; i++){
+    var x = ((i * 260 - cam.x * 0.5) % (VW + 520)) - 260;
+    ctx.beginPath();
+    ctx.moveTo(x, groundY());
+    ctx.quadraticCurveTo(x + 130, groundY() - 150, x + 260, groundY());
+    ctx.fill();
+  }
+}
+
+function drawVillage(){
+  // rizières
+  for(var i = 0; i < 14; i++){
+    var x = ((i * 200 - cam.x * 0.85) % (VW + 400)) - 200;
+    ctx.fillStyle = i % 2 ? "#7fb04a" : "#6f9b3f";
+    ctx.fillRect(x, groundY() - 6, 200, 14);
+    ctx.strokeStyle = "rgba(60,90,30,0.5)"; ctx.lineWidth = 2;
+    for(var k = 0; k < 9; k++){
+      ctx.beginPath(); ctx.moveTo(x + k * 22, groundY() - 6); ctx.lineTo(x + k * 22 + 4, groundY() + 8); ctx.stroke();
+    }
+  }
+  // maisons en bois
+  for(var h = 0; h < 8; h++){
+    var hx = ((h * 420 - cam.x * 0.9) % (VW + 840)) - 300;
+    var hw = 150, hh = 100;
+    ctx.fillStyle = "#8a6238"; ctx.fillRect(hx, groundY() - hh, hw, hh);
+    ctx.fillStyle = "#6b4a28";
+    for(var p = 0; p < 5; p++) ctx.fillRect(hx + p * 30, groundY() - hh, 3, hh);
+    ctx.fillStyle = "#a8603c";                         // toit de tôle
+    ctx.beginPath(); ctx.moveTo(hx - 14, groundY() - hh);
+    ctx.lineTo(hx + hw / 2, groundY() - hh - 52);
+    ctx.lineTo(hx + hw + 14, groundY() - hh); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#3a2a1c"; ctx.fillRect(hx + 56, groundY() - 58, 34, 58);   // porte
+    ctx.fillStyle = "#f2e0a8"; ctx.fillRect(hx + 14, groundY() - 74, 26, 22);   // fenêtre
+  }
+}
+
+function drawGround(L){
+  // route / sol
+  var gy = groundY();
+  if(G.level === 4){
+    ctx.fillStyle = "#1f6f8b"; ctx.fillRect(0, gy, VW, VH - gy);
+    ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.lineWidth = 2;
+    for(var w = 0; w < 14; w++){
+      var wx = ((w * 90 - cam.x * 1.2) % (VW + 180)) - 90;
+      ctx.beginPath(); ctx.moveTo(wx, gy + 30); ctx.lineTo(wx + 50, gy + 30); ctx.stroke();
+    }
+  } else if(G.level === 5){
+    ctx.fillStyle = "#5b7a4a"; ctx.fillRect(0, gy, VW, VH - gy);
+  } else {
+    ctx.fillStyle = L.road; ctx.fillRect(0, gy, VW, VH - gy);
+    ctx.fillStyle = "rgba(255,255,255,0.75)";
+    for(var d = 0; d < 16; d++){
+      var dx = ((d * 120 - cam.x) % (VW + 240)) - 120;
+      ctx.fillRect(dx, gy + 70, 70, 6);
+    }
+    if(G.level === 2){
+      ctx.fillStyle = "#2f6b3a"; ctx.fillRect(0, gy - 8, VW, 10);
+    }
+  }
+  // bord supérieur
+  ctx.fillStyle = "rgba(0,0,0,0.18)"; ctx.fillRect(0, gy - 3, VW, 3);
+}
+
+function drawObstacle(o){
+  var x = o.x - cam.x, gy = groundY();
+  if(o.type === "dog"){
+    ctx.save(); ctx.translate(x, gy);
+    var b = Math.sin(o.phase + G.t * 8) * 2;
+    ctx.fillStyle = "#8a5a2a"; roundRect(-22, -30 + b, 44, 20, 8); ctx.fill();
+    ctx.beginPath(); ctx.arc(-24, -32 + b, 11, 0, 7); ctx.fill();
+    ctx.fillStyle = "#6b4420";
+    ctx.fillRect(-16, -12, 5, 12); ctx.fillRect(8, -12, 5, 12);
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-28, -34 + b, 2.4, 0, 7); ctx.fill();
+    ctx.restore();
+  } else if(o.type === "rice"){
+    ctx.save(); ctx.translate(x, gy);
+    ctx.fillStyle = "#5f8f35";
+    for(var i = 0; i < 5; i++){
+      ctx.beginPath(); ctx.moveTo(-20 + i * 10, 0);
+      ctx.quadraticCurveTo(-16 + i * 10, -26, -8 + i * 10, -36); ctx.lineTo(-4 + i * 10, 0); ctx.fill();
+    }
+    ctx.restore();
+  } else if(o.type === "car"){
+    ctx.save(); ctx.translate(x, gy - 6);
+    ctx.fillStyle = "#c0392b"; roundRect(-34, -40, 68, 34, 7); ctx.fill();
+    ctx.fillStyle = "#7f2a20"; roundRect(-22, -56, 44, 20, 5); ctx.fill();
+    ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(-20, 0, 9, 0, 7); ctx.arc(20, 0, 9, 0, 7); ctx.fill();
+    ctx.restore();
+  } else if(o.type === "pothole"){
+    ctx.fillStyle = "#2a2a2e"; ctx.beginPath(); ctx.ellipse(x, gy + 40, 34, 12, 0, 0, 7); ctx.fill();
+  } else if(o.type === "stall"){
+    ctx.save(); ctx.translate(x, gy);
+    ctx.fillStyle = "#8a6238"; ctx.fillRect(-32, -46, 64, 46);
+    ctx.fillStyle = "#e94f7c"; ctx.fillRect(-38, -62, 76, 16);
+    ctx.fillStyle = "#f2b33d"; ctx.fillRect(-38, -62, 24, 16);
+    ctx.restore();
+  } else if(o.type === "cop"){
+    drawCop(x, gy, G.t, true);
+  } else if(o.type === "wave"){
+    ctx.fillStyle = "#2c8fae";
+    ctx.beginPath(); ctx.moveTo(x - 60, gy + 40);
+    ctx.quadraticCurveTo(x, gy - 40, x + 60, gy + 40); ctx.fill();
+  } else if(o.type === "buoy"){
+    ctx.fillStyle = "#e8c14a"; ctx.beginPath(); ctx.arc(x, gy + 30, 16, 0, 7); ctx.fill();
+    ctx.fillStyle = "#b33"; ctx.fillRect(x - 16, gy + 26, 32, 6);
+  } else if(o.type === "bird"){
+    ctx.strokeStyle = "#222"; ctx.lineWidth = 4;
+    var flap = Math.sin(G.t * 10 + o.phase) * 10;
+    ctx.beginPath(); ctx.moveTo(x - 18, gy - 190 + flap); ctx.lineTo(x, gy - 200); ctx.lineTo(x + 18, gy - 190 + flap); ctx.stroke();
+  } else if(o.type === "tower"){
+    ctx.fillStyle = "#6b6b74"; ctx.fillRect(x - 6, gy - 150, 12, 150);
+    ctx.fillStyle = "#b33"; ctx.beginPath(); ctx.arc(x, gy - 154, 8, 0, 7); ctx.fill();
+  } else {
+    ctx.fillStyle = "#7a7a80"; ctx.beginPath(); ctx.arc(x, gy - 12, 20, Math.PI, 0); ctx.fill();
+  }
+}
+
+function drawTarget(){
+  var x = target.x - cam.x, gy = groundY();
+  if(x < -300 || x > VW + 300) return;
+  if(G.level === 1 || G.level === 2){
+    drawKidnapper(x, gy - 6, G.t, true);
+    // sac avec Noro
+    ctx.save(); ctx.translate(x + 34, gy - 60);
+    ctx.fillStyle = "#c9b48a"; roundRect(-14, -18, 28, 30, 8); ctx.fill();
+    ctx.fillStyle = "#221610"; ctx.beginPath(); ctx.arc(0, -22, 10, 0, 7); ctx.fill();
+    ctx.restore();
+  } else if(G.level === 3){
+    // maison du Patron
+    ctx.fillStyle = "#d8c9a8"; ctx.fillRect(x - 70, gy - 150, 140, 150);
+    ctx.fillStyle = "#8a3b2a"; ctx.beginPath();
+    ctx.moveTo(x - 84, gy - 150); ctx.lineTo(x, gy - 200); ctx.lineTo(x + 84, gy - 150); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#5b3a1c"; ctx.fillRect(x - 22, gy - 70, 44, 70);
+  } else if(G.level === 4){
+    // bateau du Patron
+    ctx.save(); ctx.translate(x, gy + 40);
+    ctx.fillStyle = "#2b3a4a"; roundRect(-70, -46, 140, 34, 10); ctx.fill();
+    ctx.fillStyle = "#e8e8ee"; roundRect(-30, -70, 60, 26, 6); ctx.fill();
+    drawPatron(0, -46, G.t);
+    ctx.restore();
+  } else {
+    // hélicoptère
+    ctx.save(); ctx.translate(x, gy - 210);
+    ctx.fillStyle = "#2b3a4a"; roundRect(-56, -22, 112, 40, 16); ctx.fill();
+    ctx.fillStyle = "#8fb8d8"; roundRect(-34, -14, 44, 20, 6); ctx.fill();
+    var rot = G.t * 22;
+    ctx.strokeStyle = "#d0d0d8"; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(Math.cos(rot) * 70, -34); ctx.lineTo(-Math.cos(rot) * 70, -34); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -34); ctx.lineTo(0, -22); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawPlayer(){
+  var gy = groundY() + P.y;
+  ctx.save();
+  if(P.hurt > 0 && Math.floor(G.t * 12) % 2 === 0) ctx.globalAlpha = 0.45;
+  // ombre
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.beginPath(); ctx.ellipse(220, groundY() + 4, 26, 8, 0, 0, 7); ctx.fill();
+
+  if(P.mode === "run" || P.mode === "stealth") drawTovo(220, gy, P.anim, P.speed > 60);
+  else if(P.mode === "drive"){
+    ctx.save(); ctx.translate(220, gy);
+    ctx.fillStyle = "#d9c04a"; roundRect(-58, -54, 116, 46, 8); ctx.fill();
+    ctx.fillStyle = "#e8e2c8"; roundRect(-46, -78, 92, 30, 6); ctx.fill();
+    ctx.fillStyle = "#2b3a4a"; roundRect(-40, -74, 80, 20, 4); ctx.fill();
+    ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(-34, -6, 12, 0, 7); ctx.arc(34, -6, 12, 0, 7); ctx.fill();
+    drawTovo(-18, -48, P.anim, false);
+    ctx.restore();
+  } else if(P.mode === "boat"){
+    ctx.save(); ctx.translate(220, gy);
+    ctx.fillStyle = "#7a5a34"; ctx.beginPath();
+    ctx.moveTo(-70, 0); ctx.lineTo(-40, -34); ctx.lineTo(70, -34); ctx.lineTo(56, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#e8e2c8"; ctx.beginPath();
+    ctx.moveTo(0, -34); ctx.lineTo(0, -96); ctx.lineTo(48, -34); ctx.closePath(); ctx.fill();
+    drawTovo(-10, -30, P.anim, false);
+    ctx.restore();
+  } else {
+    ctx.save(); ctx.translate(220, gy);
+    ctx.fillStyle = "#3a6ea5"; roundRect(-52, -20, 104, 38, 15); ctx.fill();
+    ctx.fillStyle = "#bfe0f2"; roundRect(-30, -12, 40, 18, 5); ctx.fill();
+    var rot = G.t * 22;
+    ctx.strokeStyle = "#d0d0d8"; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(Math.cos(rot) * 66, -30); ctx.lineTo(-Math.cos(rot) * 66, -30); ctx.stroke();
+    drawTovo(-14, -14, P.anim, false);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/* ---- interface ---- */
+function drawHUD(){
+  // cœurs
+  for(var i = 0; i < 3; i++){
+    ctx.fillStyle = i < G.lives ? "#e94f5c" : "rgba(255,255,255,0.25)";
+    ctx.beginPath(); ctx.arc(40 + i * 34, 40, 11, 0, 7); ctx.fill();
+  }
+  ctx.font = "bold 20px Arial"; ctx.textAlign = "left";
+  ctx.fillStyle = "rgba(0,0,0,0.45)"; roundRect(20, 62, 250, 40, 10); ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.fillText("Niveau " + G.level + " · " + LEVELS[G.level - 1].name, 32, 88);
+
+  // progression vers la cible
+  var L = LEVELS[G.level - 1];
+  var prog = Math.max(0, Math.min(1, W.x / (L.length - 700)));
+  ctx.fillStyle = "rgba(0,0,0,0.35)"; roundRect(VW - 300, 32, 268, 18, 9); ctx.fill();
+  ctx.fillStyle = "#3ddc84"; roundRect(VW - 298, 34, 264 * prog, 14, 7); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.font = "bold 13px Arial"; ctx.textAlign = "right";
+  ctx.fillText(L.target, VW - 36, 72);
+
+  // boutons tactiles
+  ["left", "right", "up"].forEach(function(k){
+    var b = BTN[k];
+    var on = touch[k];
+    ctx.fillStyle = on ? "rgba(61,220,132,0.45)" : "rgba(255,255,255,0.16)";
+    roundRect(b.x, b.y, b.w, b.h, 22); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.4)"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 34px Arial"; ctx.textAlign = "center";
+    ctx.fillText(k === "left" ? "◀" : k === "right" ? "▶" : "▲", b.x + b.w / 2, b.y + b.h / 2 + 12);
+  });
+}
+
+function drawPanel(who, txt, art){
+  ctx.fillStyle = "rgba(6,12,9,0.9)"; ctx.fillRect(0, 0, VW, VH);
+  // vignette personnage
+  ctx.save();
+  ctx.translate(190, 300);
+  if(art === "noro"){ ctx.scale(1.9, 1.9); drawNoro(0, 0, G.t); }
+  else if(art === "tovo"){ ctx.scale(1.9, 1.9); drawTovo(0, 0, G.t, false); }
+  else if(art === "maire"){ ctx.scale(1.9, 1.9); drawPatron(0, 0, G.t); }
+  else {
+    ctx.scale(1.5, 1.5);
+    ctx.fillStyle = "#8a6238"; ctx.fillRect(-120, -60, 240, 60);
+    ctx.fillStyle = "#a8603c"; ctx.beginPath();
+    ctx.moveTo(-134, -60); ctx.lineTo(0, -110); ctx.lineTo(134, -60); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#6f9b3f"; ctx.fillRect(-120, 0, 240, 40);
+  }
+  ctx.restore();
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#3ddc84"; ctx.font = "bold 26px Arial";
+  ctx.fillText(who.toUpperCase(), 400, 250);
+  ctx.fillStyle = "#f2f5f2"; ctx.font = "22px Arial";
+  wrap(txt, 400, 296, 500, 34);
+  ctx.fillStyle = "rgba(255,255,255,0.55)"; ctx.font = "15px Arial";
+  ctx.fillText("Touche l'écran pour continuer", 400, 500);
+}
+
+function wrap(text, x, y, maxW, lh){
+  var words = text.split(" "), line = "", yy = y;
+  for(var i = 0; i < words.length; i++){
+    var test = line + words[i] + " ";
+    if(ctx.measureText(test).width > maxW && line){
+      ctx.fillText(line, x, yy); line = words[i] + " "; yy += lh;
+    } else line = test;
+  }
+  ctx.fillText(line, x, yy);
+}
+
+function drawCenter(title, sub, color){
+  ctx.fillStyle = "rgba(6,12,9,0.82)"; ctx.fillRect(0, 0, VW, VH);
+  ctx.textAlign = "center";
+  ctx.fillStyle = color; ctx.font = "bold 46px Arial";
+  ctx.fillText(title, VW / 2, VH / 2 - 20);
+  ctx.fillStyle = "#dfe8e2"; ctx.font = "20px Arial";
+  ctx.fillText(sub, VW / 2, VH / 2 + 30);
+  ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.font = "15px Arial";
+  ctx.fillText("Touche l'écran pour continuer", VW / 2, VH / 2 + 90);
+}
+
+/* ===================== RENDU ===================== */
+function render(){
+  ctx.save();
+  ctx.translate(offX, offY);
+  ctx.scale(scale, scale);
+  ctx.beginPath(); ctx.rect(0, 0, VW, VH); ctx.clip();
+
+  if(G.scene === "intro"){
+    drawPanel(STORY[G.panel].who, STORY[G.panel].txt, STORY[G.panel].art);
+  } else if(G.scene === "play"){
+    var L = LEVELS[G.level - 1];
+    drawSky(L);
+    drawHills();
+    if(G.level === 1 || G.level === 3) drawVillage();
+    drawGround(L);
+    obs.forEach(drawObstacle);
+    if(cop.active) drawCop(cop.x - cam.x, groundY(), cop.anim, true);
+    drawTarget();
+    drawPlayer();
+    particles.forEach(function(p){
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = "#ffd23f";
+      ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+    drawHUD();
+    if(G.flash > 0){ ctx.fillStyle = "rgba(220,40,40," + (G.flash * 0.35) + ")"; ctx.fillRect(0, 0, VW, VH); }
+  } else if(G.scene === "levelup"){
+    drawCenter("Niveau " + G.level + " réussi !", LEVELS[G.level - 1].name + " · Score " + G.score, "#3ddc84");
+  } else if(G.scene === "gameover"){
+    drawCenter("Perdu", (G.msg || "Recommence, Tovo.") + " · Score " + G.score, "#e94f5c");
+  } else if(G.scene === "ending"){
+    ctx.fillStyle = "#0d1b14"; ctx.fillRect(0, 0, VW, VH);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ffd23f"; ctx.font = "bold 40px Arial";
+    ctx.fillText("NORO EST SAUVÉE", VW / 2, 170);
+    ctx.fillStyle = "#f2f5f2"; ctx.font = "20px Arial";
+    wrap("Tovo ramène Noro au village. Le Maire pleure de joie. Tout le village danse jusqu'au matin. La policière s'excuse et devient son amie. Tu es le héros du village.", 180, 240, 600, 34);
+    ctx.fillStyle = "#3ddc84"; ctx.font = "bold 26px Arial";
+    ctx.fillText("Score final : " + G.score, VW / 2, 430);
+    ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.font = "15px Arial";
+    ctx.fillText("Touche l'écran pour rejouer", VW / 2, 490);
+  }
+  ctx.restore();
+}
+
+/* ===================== BOUCLE ===================== */
+var last = 0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  var dt = Math.min(0.05, (ts - last) / 1000 || 0.016);
+  last = ts;
+  if(G.scene === "play") step(dt);
+  else G.t += dt;
+  render();
+}
+resize();
+requestAnimationFrame(loop);
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(function(){}); }
+</script>
+</body>
+</html>
