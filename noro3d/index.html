@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="mg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0d1b14">
+<title>Sauver la Fille du Maire 3D — Madagascar</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0d1b14;
+    font-family:-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;user-select:none}
+  #c{display:block;width:100%;height:100%;touch-action:none}
+  .hud{position:fixed;top:0;left:0;right:0;padding:14px 16px;display:flex;
+    justify-content:space-between;align-items:flex-start;pointer-events:none;
+    text-shadow:0 2px 8px rgba(0,0,0,.8);font-size:14px;font-weight:600}
+  .hud .right{text-align:right}
+  #hearts{font-size:20px;letter-spacing:2px}
+  #distBar{width:120px;height:6px;border-radius:3px;background:rgba(255,255,255,.25);
+    margin-top:6px;overflow:hidden}
+  #distFill{height:100%;width:0%;background:#4ade80;transition:width .2s}
+  .ctrl{position:fixed;bottom:0;left:0;right:0;padding:18px 20px 26px;
+    display:flex;justify-content:space-between;align-items:flex-end;pointer-events:none}
+  .btn{pointer-events:auto;width:74px;height:74px;border-radius:50%;
+    background:rgba(255,255,255,.16);border:2px solid rgba(255,255,255,.4);
+    display:flex;align-items:center;justify-content:center;font-size:26px;
+    color:#fff;backdrop-filter:blur(6px);transition:transform .08s,background .15s}
+  .btn:active,.btn.on{transform:scale(.93);background:rgba(74,222,128,.45);
+    border-color:#4ade80}
+  .grp{display:flex;gap:14px}
+  #jump{width:88px;height:88px;font-size:30px}
+  .overlay{position:fixed;inset:0;display:flex;flex-direction:column;justify-content:center;
+    padding:28px 24px;background:linear-gradient(160deg,rgba(6,20,14,.96),rgba(3,10,8,.98));
+    z-index:10;overflow:auto}
+  .overlay.hide{display:none}
+  .ov-top{font-size:12px;letter-spacing:3px;color:#4ade80;text-transform:uppercase;
+    margin-bottom:14px;font-weight:700}
+  .ov-title{font-size:26px;font-weight:800;line-height:1.25;margin-bottom:14px}
+  .ov-text{font-size:15px;line-height:1.6;color:#c8d6cf;margin-bottom:22px}
+  .ov-text em{color:#4ade80;font-style:normal;font-weight:600}
+  .ov-btn{align-self:flex-start;padding:15px 30px;border-radius:999px;
+    background:#4ade80;color:#062018;font-weight:800;font-size:16px;border:none}
+  .ov-btn:active{transform:scale(.97)}
+  .ov-step{margin-top:18px;font-size:12px;color:#5d7568}
+  #hint{position:fixed;bottom:120px;left:0;right:0;text-align:center;font-size:13px;
+    color:rgba(255,255,255,.75);pointer-events:none;text-shadow:0 2px 6px #000}
+  #flash{position:fixed;inset:0;background:#ff2d2d;opacity:0;pointer-events:none;
+    transition:opacity .25s}
+  #endScreen .ov-title{font-size:30px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div class="hud">
+  <div>
+    <div id="lvlName">Niveau 1 — Ny tanàna</div>
+    <div id="hearts">❤❤❤</div>
+  </div>
+  <div class="right">
+    <div id="score">0 Ar</div>
+    <div id="distTxt">- m</div>
+    <div id="distBar"><div id="distFill"></div></div>
+  </div>
+</div>
+
+<div id="hint">◀ ▶ pour esquiver · ▲ pour sauter</div>
+
+<div class="ctrl">
+  <div class="grp">
+    <div class="btn" id="left">◀</div>
+    <div class="btn" id="right">▶</div>
+  </div>
+  <div class="btn" id="jump">▲</div>
+</div>
+
+<div id="flash"></div>
+
+<div class="overlay" id="intro">
+  <div class="ov-top" id="ovTop">Sauver la Fille du Maire</div>
+  <div class="ov-title" id="ovTitle">Toamasina, Madagascar</div>
+  <div class="ov-text" id="ovText"></div>
+  <button class="ov-btn" id="ovBtn">Hanomboka ▶</button>
+  <div class="ov-step" id="ovStep">1 / 4</div>
+</div>
+
+<script src="lib/three.min.js"></script>
+<script>
+// ---------- Sauver la Fille du Maire 3D ----------
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x9fd6b4, 40, 130);
+
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 400);
+camera.position.set(0, 5.2, 9.5);
+camera.lookAt(0, 1.6, -6);
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// lumières
+const sun = new THREE.DirectionalLight(0xfff2d6, 2.1);
+sun.position.set(-18, 30, 14);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.left = -30;
+sun.shadow.camera.right = 30;
+sun.shadow.camera.top = 30;
+sun.shadow.camera.bottom = -30;
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xbfe3ff, 0x4a6b3d, 1.15));
+
+// ---------- matériaux utilitaires ----------
+const mat = (color, opts = {}) =>
+  new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05, ...opts });
+
+function box(w, h, d, color, x = 0, y = 0, z = 0) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+function cyl(rt, rb, h, color, seg = 10) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat(color));
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+function sphere(r, color, seg = 10) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, seg, seg), mat(color));
+  m.castShadow = true;
+  return m;
+}
+
+// ---------- personnages ----------
+function makeTovo() {
+  const g = new THREE.Group();
+  g.add(box(0.62, 0.75, 0.36, 0xd93b3b, 0, 1.05, 0));      // chemise rouge
+  g.add(box(0.58, 0.5, 0.34, 0x2b4a7a, 0, 0.45, 0));       // short
+  g.add(sphere(0.24, 0x6b3f22, 6));                        // tête
+  g.children[2].position.set(0, 1.68, 0);
+  g.add(box(0.5, 0.1, 0.42, 0x2a1a0f, 0, 1.82, 0));        // cheveux
+  const armL = box(0.16, 0.55, 0.16, 0xc98f66, -0.42, 1.05, 0);
+  const armR = box(0.16, 0.55, 0.16, 0xc98f66, 0.42, 1.05, 0);
+  const legL = box(0.18, 0.55, 0.18, 0x2b4a7a, -0.16, 0.1, 0);
+  const legR = box(0.18, 0.55, 0.18, 0x2b4a7a, 0.16, 0.1, 0);
+  g.add(armL, armR, legL, legR);
+  g.userData.limbs = { armL, armR, legL, legR };
+  return g;
+}
+
+function makeNoro() {
+  const g = new THREE.Group();
+  g.add(box(0.58, 0.8, 0.34, 0xf2e9d8, 0, 1.05, 0));       // robe lamba
+  g.add(box(0.66, 0.62, 0.4, 0xb8324a, 0, 0.5, 0));        // jupe rouge
+  g.add(sphere(0.23, 0xc98f66, 6));
+  g.children[2].position.set(0, 1.66, 0);
+  g.add(box(0.28, 0.62, 0.3, 0x1a1208, 0, 1.5, 0.12));     // cheveux longs
+  g.add(box(0.14, 0.14, 0.14, 0xf2e9d8, 0, 2.0, 0));       // fleur
+  return g;
+}
+
+function makeKidnapper() {
+  const g = new THREE.Group();
+  g.add(box(0.66, 0.8, 0.38, 0x22252b, 0, 1.15, 0));       // veste noire
+  g.add(sphere(0.26, 0x14161a, 8));                        // casque
+  g.children[1].position.set(0, 1.78, 0);
+  g.add(box(0.3, 0.18, 0.34, 0x0a0c10, 0, 1.72, -0.16));   // visière
+  // moto
+  const bike = new THREE.Group();
+  bike.add(cyl(0.34, 0.34, 0.16, 0x101014, 14));
+  bike.children[0].rotation.z = Math.PI / 2;
+  bike.children[0].position.set(0, 0.36, 0.72);
+  const w2 = bike.children[0].clone();
+  w2.position.z = -0.72;
+  bike.add(w2);
+  bike.add(box(0.42, 0.3, 1.5, 0x8b1a1a, 0, 0.62, 0));
+  bike.add(box(0.5, 0.12, 0.6, 0x2b2b2b, 0, 0.82, -0.2));
+  g.add(bike);
+  g.userData.bike = bike;
+  return g;
+}
+
+function makePoliciere() {
+  const g = new THREE.Group();
+  g.add(box(0.62, 0.78, 0.36, 0x2b4c8c, 0, 1.05, 0));      // uniforme bleu
+  g.add(box(0.6, 0.5, 0.34, 0x1e3a6e, 0, 0.45, 0));
+  g.add(sphere(0.23, 0x8d5a3b, 6));
+  g.children[2].position.set(0, 1.66, 0);
+  g.add(cyl(0.3, 0.3, 0.1, 0x1a2a4a, 10));                 // casquette
+  g.children[3].position.set(0, 1.84, 0);
+  g.add(box(0.16, 0.5, 0.16, 0x8d5a3b, -0.42, 1.05, 0));
+  g.add(box(0.16, 0.5, 0.16, 0x8d5a3b, 0.42, 1.05, 0));
+  return g;
+}
+
+function makePatron() {
+  const g = new THREE.Group();
+  g.add(box(0.85, 0.9, 0.5, 0x1b1b1f, 0, 1.1, 0));         // costume
+  g.add(box(0.3, 0.5, 0.06, 0xf5f5f5, 0, 1.15, -0.26));    // chemise
+  g.add(box(0.14, 0.3, 0.08, 0x8b1a1a, 0, 1.2, -0.29));    // cravate
+  g.add(sphere(0.28, 0x8d5a3b, 7));
+  g.children[3].position.set(0, 1.78, 0);
+  g.add(box(0.5, 0.12, 0.1, 0x0a0a0a, 0, 1.82, -0.24));    // lunettes
+  return g;
+}
+// ---------- niveaux ----------
+const LEVELS = [
+  {
+    name: "Niveau 1 — Ny tanàna", sub: "Le village", env: "village",
+    sky: 0x9fd6b4, fogNear: 40, fogFar: 130, ground: 0x6f9b4a,
+    road: 0x9c7a52, speed: 15, length: 620, obstacle: "dog", player: "tovo",
+    hint: "Esquive les chiens, la policière te poursuit",
+  },
+  {
+    name: "Niveau 2 — Ny lalana", sub: "La route vers Toamasina", env: "road",
+    sky: 0xa8c8e8, fogNear: 50, fogFar: 160, ground: 0x5d7f45,
+    road: 0x4a4a52, speed: 22, length: 780, obstacle: "car", player: "taxi",
+    hint: "Rattrape la moto du Kidnappeur",
+  },
+  {
+    name: "Niveau 3 — Ny bazary", sub: "Le marché de Toamasina", env: "market",
+    sky: 0xd9c7a3, fogNear: 35, fogFar: 110, ground: 0xb99a6a,
+    road: 0xa8875c, speed: 14, length: 640, obstacle: "stall", player: "tovo",
+    hint: "Slalome entre les étals, la police te cherche",
+  },
+  {
+    name: "Niveau 4 — Ny seranana", sub: "Le port", env: "sea",
+    sky: 0x8ec5e8, fogNear: 55, fogFar: 170, ground: 0x1f6f9c,
+    road: 0x1a5f8a, speed: 20, length: 700, obstacle: "buoy", player: "boat",
+    hint: "Poursuis le bateau du Patron sur la mer",
+  },
+  {
+    name: "Niveau 5 — Ny habakabaka", sub: "L'aéroport", env: "sky",
+    sky: 0x2f6ea8, fogNear: 70, fogFar: 220, ground: 0x6b8fa8,
+    road: 0x2f6ea8, speed: 26, length: 760, obstacle: "bird", player: "heli",
+    hint: "Rattrape l'hélicoptère du Patron",
+  },
+];
+
+const STORY = [
+  { t: "Toamasina, Madagascar", x: "Tovo habite un petit village près de Toamasina. Maisons en bois, rizières, zébus. Noro, la fille du Maire, est son amie d'enfance." },
+  { t: "Le soir du drame", x: "Un homme au casque noir arrive en moto, attrape <em>Noro</em>, la jette dans un sac et disparaît dans la nuit." },
+  { t: "La promesse du Maire", x: "« Tovo, sauve ma fille. Je n'ai que toi. Si tu la ramènes, je te donne tout ce que tu veux. »" },
+  { t: "La piste", x: "Le Kidnappeur a livré Noro à son <em>Patron</em>, à Toamasina. Cinq étapes t'attendent : village, route, marché, port, ciel." },
+];
+
+// ---------- état ----------
+const G = {
+  scene: "intro", level: 0, lives: 3, score: 0, storyStep: 0,
+  running: false, speed: 0, dist: 0, lane: 1, target: 0, jump: 0,
+  hurt: 0, best: 0,
+};
+const LANES = [-2.3, 0, 2.3];
+
+let world = null;   // groupe de l'environnement courant
+let player = null;  // modèle du joueur
+let targetModel = null;
+let obstacles = [];
+let props = [];
+
+// ---------- construction du monde ----------
+function clearWorld() {
+  if (world) {
+    scene.remove(world);
+    world.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+    });
+  }
+  world = new THREE.Group();
+  scene.add(world);
+  obstacles = [];
+  props = [];
+  targetModel = null;
+  player = null;
+}
+
+function makeGround(cfg) {
+  const g = new THREE.Group();
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(140, 400), mat(cfg.ground));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(0, 0, -150);
+  ground.receiveShadow = true;
+  g.add(ground);
+
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 400), mat(cfg.road));
+  road.rotation.x = -Math.PI / 2;
+  road.position.set(0, 0.02, -150);
+  road.receiveShadow = true;
+  g.add(road);
+
+  if (cfg.env === "road") {
+    for (let z = 6; z > -300; z -= 9) {
+      const dash = box(0.28, 0.03, 4, 0xf2f2e8, 0, 0.05, z);
+      g.add(dash);
+      const l1 = box(0.16, 0.03, 400, 0xf2f2e8, -4.1, 0.05, -150);
+      const l2 = box(0.16, 0.03, 400, 0xf2f2e8, 4.1, 0.05, -150);
+      g.add(l1, l2);
+    }
+  }
+  return g;
+}
+
+function addVillageProp(z, side) {
+  const x = side * (7 + Math.random() * 6);
+  const r = Math.random();
+  if (r < 0.45) {
+    // maison en bois sur pilotis
+    const h = new THREE.Group();
+    h.add(box(3.2, 2.2, 3, 0xb98a5a, 0, 1.7, 0));
+    h.add(box(3.8, 0.5, 3.6, 0x6d4a2f, 0, 0.6, 0));
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(2.6, 1.4, 4), mat(0x8a5a34));
+    roof.rotation.y = Math.PI / 4;
+    roof.position.y = 3.5;
+    roof.castShadow = true;
+    h.add(roof);
+    h.add(box(0.7, 1.2, 0.1, 0x2a1a10, 0, 1.5, -1.52));
+    h.position.set(x, 0, z);
+    h.rotation.y = side > 0 ? -0.3 : 0.3;
+    world.add(h);
+  } else if (r < 0.7) {
+    // palmier
+    const p = new THREE.Group();
+    const trunk = cyl(0.16, 0.24, 4.2, 0x7a5a34, 8);
+    trunk.position.y = 2.1;
+    p.add(trunk);
+    for (let i = 0; i < 5; i++) {
+      const leaf = box(0.24, 0.08, 2.2, 0x3f7a2f);
+      leaf.position.set(0, 4.2, 0);
+      leaf.rotation.y = (i / 5) * Math.PI * 2;
+      leaf.rotation.x = -0.4;
+      leaf.position.x = Math.sin((i / 5) * 6.28) * 0.9;
+      leaf.position.z = Math.cos((i / 5) * 6.28) * 0.9;
+      p.add(leaf);
+    }
+    p.position.set(x, 0, z);
+    world.add(p);
+  } else if (r < 0.88) {
+    // rizière
+    const pad = new THREE.Mesh(new THREE.PlaneGeometry(9, 12), mat(0x86b84a));
+    pad.rotation.x = -Math.PI / 2;
+    pad.position.set(x * 1.4, 0.04, z);
+    world.add(pad);
+    for (let i = 0; i < 6; i++) {
+      const t = box(0.12, 0.5, 0.12, 0x6f9b34, x * 1.4 + (Math.random() - 0.5) * 7, 0.25, z + (Math.random() - 0.5) * 9);
+      world.add(t);
+    }
+  } else {
+    // zébu
+    const zb = new THREE.Group();
+    zb.add(box(1.5, 0.85, 0.75, 0x2b2b2b, 0, 1.0, 0));
+    zb.add(box(0.55, 0.5, 0.45, 0x2b2b2b, 0.95, 1.2, 0));
+    zb.add(box(0.12, 0.7, 0.12, 0xd8d8d8, 0.7, 1.7, 0.2));
+    zb.add(box(0.12, 0.7, 0.12, 0xd8d8d8, 0.7, 1.7, -0.2));
+    [-0.5, 0.5].forEach((dx) => {
+      zb.add(box(0.14, 0.75, 0.14, 0x1e1e1e, dx, 0.38, 0.26));
+      zb.add(box(0.14, 0.75, 0.14, 0x1e1e1e, dx, 0.38, -0.26));
+    });
+    zb.position.set(x, 0, z);
+    zb.rotation.y = side > 0 ? -1.6 : 1.6;
+    world.add(zb);
+  }
+}
+
+function addRoadProp(z, side) {
+  const x = side * (7 + Math.random() * 8);
+  if (Math.random() < 0.6) {
+    const p = new THREE.Group();
+    const trunk = cyl(0.2, 0.3, 3.4, 0x6b4a2c, 7);
+    trunk.position.y = 1.7;
+    p.add(trunk);
+    const crown = sphere(1.5, 0x3f7a2f, 7);
+    crown.position.y = 3.9;
+    p.add(crown);
+    p.position.set(x, 0, z);
+    world.add(p);
+  } else {
+    const hut = box(2.6, 1.8, 2.4, 0xc9a06a, x, 0.9, z);
+    world.add(hut);
+    const roof = box(3, 0.2, 2.8, 0x8a5a34, x, 1.9, z);
+    world.add(roof);
+  }
+}
+
+function addMarketProp(z, side) {
+  const x = side * (5.2 + Math.random() * 4);
+  const colors = [0xd94f4f, 0xe8a33d, 0x3f8f6f, 0x8a5ac9, 0xd9c04f];
+  const stall = new THREE.Group();
+  stall.add(box(2.2, 0.9, 1.6, 0x9a7a4a, 0, 0.45, 0));
+  stall.add(box(2.4, 0.1, 1.8, 0x7a5a34, 0, 0.95, 0));
+  const roof = box(2.8, 0.14, 2.2, colors[Math.floor(Math.random() * colors.length)], 0, 2.1, 0);
+  stall.add(roof);
+  [-1.2, 1.2].forEach((dx) => {
+    const pole = box(0.12, 2.1, 0.12, 0x6b4a2c, dx, 1.05, 0);
+    stall.add(pole);
+  });
+  for (let i = 0; i < 4; i++) {
+    const fruit = sphere(0.16, colors[i % colors.length], 6);
+    fruit.position.set((Math.random() - 0.5) * 1.8, 1.05, (Math.random() - 0.5) * 1.2);
+    stall.add(fruit);
+  }
+  stall.position.set(x, 0, z);
+  stall.rotation.y = side > 0 ? -0.4 : 0.4;
+  world.add(stall);
+}
+
+function addSeaProp(z, side) {
+  const x = side * (9 + Math.random() * 10);
+  const wave = new THREE.Mesh(new THREE.PlaneGeometry(9, 9, 4, 4), mat(0x2f86b8));
+  wave.rotation.x = -Math.PI / 2;
+  wave.position.set(x, 0.06, z);
+  wave.userData.wave = true;
+  world.add(wave);
+  props.push(wave);
+}
+
+function addSkyProp(z, side) {
+  const x = side * (6 + Math.random() * 16);
+  const cloud = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const s = sphere(1.6 + Math.random(), 0xffffff, 6);
+    s.position.set((Math.random() - 0.5) * 2.4, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 1.6);
+    cloud.add(s);
+  }
+  cloud.position.set(x, 3 + Math.random() * 8, z);
+  world.add(cloud);
+}
+// ---------- véhicules ----------
+function makeTaxi() {
+  const g = new THREE.Group();
+  g.add(box(2.0, 1.0, 4.0, 0xf0d24a, 0, 0.85, 0));      // caisse jaune
+  g.add(box(1.9, 0.9, 2.2, 0xf0d24a, 0, 1.7, -0.3));     // toit surélevé
+  g.add(box(1.7, 0.5, 0.1, 0x2b3a4a, 0, 1.7, -1.42));    // vitre arrière
+  g.add(box(1.7, 0.5, 0.1, 0x2b3a4a, 0, 1.7, 0.82));
+  [-0.9, 0.9].forEach((dx) => {
+    [1.2, -1.2].forEach((dz) => {
+      const w = cyl(0.38, 0.38, 0.24, 0x141414, 12);
+      w.rotation.z = Math.PI / 2;
+      w.position.set(dx, 0.38, dz);
+      g.add(w);
+    });
+  });
+  g.add(box(1.2, 0.1, 0.6, 0x8b6a2a, 0, 2.25, -0.3));    // galerie
+  g.add(box(0.8, 0.35, 0.5, 0x6b8a3a, 0, 2.5, -0.5));    // bagages
+  return g;
+}
+
+function makeBoat() {
+  const g = new THREE.Group();
+  const hull = box(1.8, 0.7, 4.4, 0x8a5a34, 0, 0.5, 0);
+  g.add(hull);
+  g.add(box(1.5, 0.5, 1.2, 0x6b4a2c, 0, 0.95, 0.4));
+  const sail = box(0.1, 2.6, 2.0, 0xf2ead8, 0, 2.2, -0.6);
+  g.add(sail);
+  const mast = cyl(0.08, 0.08, 3.2, 0x6b4a2c, 6);
+  mast.position.y = 1.8;
+  g.add(mast);
+  return g;
+}
+
+function makeHeli() {
+  const g = new THREE.Group();
+  g.add(box(1.7, 1.3, 3.2, 0x2b4c8c, 0, 1.2, 0));        // cabine
+  g.add(box(0.5, 0.5, 2.6, 0x2b4c8c, 0, 1.15, 2.4));     // queue
+  g.add(box(0.9, 0.9, 0.12, 0x9fd6e8, 0, 1.35, -1.62));  // vitre
+  const rotor = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const b = box(6.4, 0.08, 0.22, 0x1a1a1a, 0, 0, 0);
+    b.rotation.y = (i / 3) * Math.PI;
+    rotor.add(b);
+  }
+  rotor.position.y = 2.1;
+  g.add(rotor);
+  g.userData.rotor = rotor;
+  const tail = box(0.16, 0.16, 1.6, 0x1a1a1a, 0, 1.6, 3.4);
+  g.add(tail);
+  [-0.8, 0.8].forEach((dx) => {
+    const skid = box(0.12, 0.12, 2.6, 0x1a1a1a, dx, 0.3, 0);
+    g.add(skid);
+  });
+  return g;
+}
+
+function makeTargetModel(kind) {
+  if (kind === "noro") {
+    const g = makeNoro();
+    g.position.set(0, 0, -46);
+    return g;
+  }
+  if (kind === "moto") {
+    const g = makeKidnapper();
+    g.position.set(0, 0, -46);
+    return g;
+  }
+  if (kind === "boss") {
+    const g = new THREE.Group();
+    const p = makePatron();
+    p.position.y = 0.6;
+    g.add(p);
+    g.position.set(0, 0, -46);
+    return g;
+  }
+  return null;
+}
+
+// ---------- obstacle ----------
+function makeObstacle(type, lane, z) {
+  let m = null;
+  if (type === "dog") {
+    m = new THREE.Group();
+    m.add(box(0.9, 0.5, 0.5, 0xb08d5a, 0, 0.42, 0));
+    m.add(box(0.45, 0.4, 0.4, 0xb08d5a, 0.6, 0.6, 0));
+    m.add(box(0.12, 0.35, 0.12, 0x8a6a3a, -0.3, 0.16, 0.18));
+    m.add(box(0.12, 0.35, 0.12, 0x8a6a3a, 0.3, 0.16, 0.18));
+  } else if (type === "car") {
+    m = new THREE.Group();
+    const colors = [0xd94f4f, 0x4f7fd9, 0xe8e8e8, 0x3f8f6f];
+    const c = colors[Math.floor(Math.random() * colors.length)];
+    m.add(box(1.9, 0.9, 3.6, c, 0, 0.7, 0));
+    m.add(box(1.7, 0.7, 1.8, c, 0, 1.4, -0.2));
+    m.add(box(1.5, 0.45, 0.1, 0x2b3a4a, 0, 1.45, -1.1));
+  } else if (type === "stall") {
+    m = new THREE.Group();
+    m.add(box(2.0, 1.0, 1.4, 0x9a7a4a, 0, 0.5, 0));
+    m.add(box(2.4, 0.15, 1.8, 0xd94f4f, 0, 1.9, 0));
+    m.add(box(0.12, 1.9, 0.12, 0x6b4a2c, -1.0, 0.95, 0));
+    m.add(box(0.12, 1.9, 0.12, 0x6b4a2c, 1.0, 0.95, 0));
+  } else if (type === "buoy") {
+    m = new THREE.Group();
+    const b = cyl(0.4, 0.5, 0.9, 0xd94f4f, 10);
+    b.position.y = 0.45;
+    m.add(b);
+    m.add(sphere(0.18, 0xf2f2f2, 6));
+  } else if (type === "bird") {
+    m = new THREE.Group();
+    m.add(box(0.6, 0.3, 0.9, 0x2b2b2b, 0, 0, 0));
+    const w1 = box(1.4, 0.06, 0.5, 0x2b2b2b, -0.8, 0.1, 0);
+    const w2 = box(1.4, 0.06, 0.5, 0x2b2b2b, 0.8, 0.1, 0);
+    m.add(w1, w2);
+  }
+  m.position.set(LANES[lane], type === "bird" ? 3.2 : 0, z);
+  m.userData.lane = lane;
+  m.userData.type = type;
+  m.userData.phase = Math.random() * 6.28;
+  m.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return m;
+}
+// ---------- démarrage d'un niveau ----------
+function startLevel(idx) {
+  G.level = idx;
+  const cfg = LEVELS[idx];
+  clearWorld();
+
+  scene.background = new THREE.Color(cfg.sky);
+  scene.fog = new THREE.Fog(cfg.sky, cfg.fogNear, cfg.fogFar);
+
+  world.add(makeGround(cfg));
+
+  // décor
+  for (let z = -4; z > -320; z -= 14) {
+    if (cfg.env === "village") { addVillageProp(z, -1); addVillageProp(z - 7, 1); }
+    else if (cfg.env === "road") { addRoadProp(z, -1); addRoadProp(z - 7, 1); }
+    else if (cfg.env === "market") { addMarketProp(z, -1); addMarketProp(z - 7, 1); }
+    else if (cfg.env === "sea") { addSeaProp(z, -1); addSeaProp(z - 7, 1); }
+    else { addSkyProp(z, -1); addSkyProp(z - 7, 1); }
+  }
+
+  // joueur
+  if (cfg.player === "tovo") player = makeTovo();
+  else if (cfg.player === "taxi") player = makeTaxi();
+  else if (cfg.player === "boat") player = makeBoat();
+  else player = makeHeli();
+  player.position.set(0, 0, 0);
+  world.add(player);
+
+  // cible
+  const kind = idx === 0 ? "noro" : (idx === 4 ? "boss" : "moto");
+  targetModel = makeTargetModel(kind);
+  if (idx === 4 && targetModel) {
+    // l'hélicoptère du Patron
+    const h = makeHeli();
+    h.scale.set(1.2, 1.2, 1.2);
+    h.position.set(0, 1.5, 0);
+    targetModel = new THREE.Group();
+    targetModel.add(h);
+    targetModel.position.set(0, 0, -46);
+    targetModel.userData.rotor = h.userData.rotor;
+  }
+  world.add(targetModel);
+
+  // policière qui poursuit (niveaux 1 et 3)
+  G.cop = null;
+  if (cfg.env === "village" || cfg.env === "market") {
+    G.cop = makePoliciere();
+    G.cop.position.set(-1.2, 0, 6.2);
+    world.add(G.cop);
+  }
+
+  G.lives = Math.max(G.lives, 3);
+  G.dist = 0;
+  G.speed = cfg.speed;
+  G.lane = 1;
+  G.jump = 0;
+  G.hurt = 0;
+  G.obstacleTimer = 2.4;
+  G.scene = "play";
+  G.running = true;
+
+  document.getElementById("lvlName").textContent = cfg.name;
+  document.getElementById("hint").textContent = cfg.hint;
+  updateHUD();
+  document.getElementById("intro").classList.add("hide");
+}
+
+function updateHUD() {
+  document.getElementById("hearts").textContent = "❤".repeat(Math.max(0, G.lives)) +
+    "🖤".repeat(Math.max(0, 3 - G.lives));
+  document.getElementById("score").textContent = G.score.toLocaleString("fr-FR") + " Ar";
+  const cfg = LEVELS[G.level];
+  const rest = Math.max(0, Math.round((cfg.length - G.dist) / 10));
+  document.getElementById("distTxt").textContent = rest + " m";
+  document.getElementById("distFill").style.width =
+    Math.min(100, (G.dist / cfg.length) * 100) + "%";
+}
+
+// ---------- dégâts ----------
+function hurt() {
+  if (G.hurt > 0) return;
+  G.hurt = 1.1;
+  G.lives -= 1;
+  G.speed = Math.max(LEVELS[G.level].speed * 0.55, G.speed * 0.5);
+  const f = document.getElementById("flash");
+  f.style.opacity = 0.45;
+  setTimeout(() => (f.style.opacity = 0), 120);
+  updateHUD();
+  if (G.lives <= 0) gameOver();
+}
+
+function gameOver() {
+  G.scene = "over";
+  G.running = false;
+  showPanel("GAME OVER", "Tovo est tombé. Ny dia mbola mitohy : réessaie, le village compte sur toi.",
+    "Hamerina ▶", () => startLevel(G.level));
+}
+
+function levelComplete() {
+  G.running = false;
+  G.scene = "win";
+  G.score += 500 * (G.level + 1);
+  G.lives = Math.min(3, G.lives + 1);
+  updateHUD();
+  const cfg = LEVELS[G.level];
+  const next = G.level + 1;
+  if (next < LEVELS.length) {
+    const titles = [
+      "Noro est sauvée !", "La moto est rattrapée !", "Le Patron est localisé !",
+      "Le bateau est bloqué !",
+    ];
+    showPanel(titles[G.level] || "Niveau réussi !",
+      "Étape suivante : <em>" + LEVELS[next].sub + "</em>. " + LEVELS[next].hint + ".",
+      "Hanohy ▶", () => startLevel(next));
+  } else {
+    showPanel("Misaotra, Tovo !",
+      "Tu ramènes Noro au village. Le Maire te serre dans ses bras : « Tu es le héros du village. » La policière s'excuse et devient ton amie. Ny tanàna mankalaza !",
+      "Jouer encore ▶", () => {
+        G.score = 0; G.lives = 3; startLevel(0);
+      });
+  }
+}
+
+// ---------- panneaux ----------
+function showPanel(title, text, btn, action) {
+  const ov = document.getElementById("intro");
+  document.getElementById("ovTop").textContent = "Sauver la Fille du Maire 3D";
+  document.getElementById("ovTitle").textContent = title;
+  document.getElementById("ovText").innerHTML = text;
+  document.getElementById("ovBtn").textContent = btn;
+  document.getElementById("ovStep").textContent = "";
+  ov.classList.remove("hide");
+  document.getElementById("ovBtn").onclick = () => {
+    ov.classList.add("hide");
+    action();
+  };
+}
+
+function showStory() {
+  const s = STORY[G.storyStep];
+  const ov = document.getElementById("intro");
+  document.getElementById("ovTop").textContent = "Sauver la Fille du Maire 3D";
+  document.getElementById("ovTitle").textContent = s.t;
+  document.getElementById("ovText").innerHTML = s.x;
+  document.getElementById("ovStep").textContent = (G.storyStep + 1) + " / " + STORY.length;
+  document.getElementById("ovBtn").textContent =
+    G.storyStep < STORY.length - 1 ? "Hanohy ▶" : "Hanomboka ny lalao ▶";
+  ov.classList.remove("hide");
+  document.getElementById("ovBtn").onclick = () => {
+    if (G.storyStep < STORY.length - 1) {
+      G.storyStep++;
+      showStory();
+    } else {
+      ov.classList.add("hide");
+      startLevel(0);
+    }
+  };
+}
+// ---------- entrées ----------
+const input = { left: false, right: false, jump: false };
+const btnL = document.getElementById("left");
+const btnR = document.getElementById("right");
+const btnJ = document.getElementById("jump");
+
+function bindHold(el, key) {
+  const on = (e) => { e.preventDefault(); input[key] = true; el.classList.add("on"); };
+  const off = (e) => { e.preventDefault(); input[key] = false; el.classList.remove("on"); };
+  el.addEventListener("touchstart", on, { passive: false });
+  el.addEventListener("touchend", off, { passive: false });
+  el.addEventListener("touchcancel", off, { passive: false });
+  el.addEventListener("mousedown", on);
+  el.addEventListener("mouseup", off);
+  el.addEventListener("mouseleave", off);
+}
+bindHold(btnL, "left");
+bindHold(btnR, "right");
+bindHold(btnJ, "jump");
+
+addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft" || e.key === "a") input.left = true;
+  if (e.key === "ArrowRight" || e.key === "d") input.right = true;
+  if (e.key === " " || e.key === "ArrowUp" || e.key === "w") { input.jump = true; e.preventDefault(); }
+});
+addEventListener("keyup", (e) => {
+  if (e.key === "ArrowLeft" || e.key === "a") input.left = false;
+  if (e.key === "ArrowRight" || e.key === "d") input.right = false;
+  if (e.key === " " || e.key === "ArrowUp" || e.key === "w") input.jump = false;
+});
+
+// glissement horizontal sur l'écran
+let touchX = null;
+canvas.addEventListener("touchstart", (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+canvas.addEventListener("touchmove", (e) => {
+  if (touchX === null) return;
+  const dx = e.touches[0].clientX - touchX;
+  if (Math.abs(dx) > 34) {
+    if (dx > 0 && G.lane < 2) G.lane++;
+    if (dx < 0 && G.lane > 0) G.lane--;
+    touchX = e.touches[0].clientX;
+  }
+}, { passive: true });
+canvas.addEventListener("touchend", () => { touchX = null; });
+
+// ---------- boucle ----------
+const clock = new THREE.Clock();
+let elapsed = 0;
+
+function spawnObstacle(cfg) {
+  const lane = Math.floor(Math.random() * 3);
+  const z = -110 - Math.random() * 40;
+  const o = makeObstacle(cfg.obstacle, lane, z);
+  world.add(o);
+  obstacles.push(o);
+}
+
+function tick() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  elapsed += dt;
+
+  if (G.scene === "play" && G.running) {
+    const cfg = LEVELS[G.level];
+
+    // vitesse : accélère progressivement, ralentit si on recule
+    const boost = input.right ? 1.35 : (input.left ? 0.55 : 1);
+    G.speed += (cfg.speed * boost - G.speed) * Math.min(1, dt * 1.4);
+    const v = G.speed;
+
+    G.dist += v * dt;
+    G.score += Math.round(v * dt * 2);
+
+    // déplacement latéral
+    const targetX = LANES[G.lane];
+    player.position.x += (targetX - player.position.x) * Math.min(1, dt * 9);
+
+    // saut
+    if (input.jump && G.jump === 0) G.jump = 1;
+    if (G.jump > 0) {
+      G.jump += dt * 3.2;
+      const h = Math.sin(Math.min(G.jump, Math.PI)) * 1.9;
+      player.position.y = Math.max(0, h);
+      if (G.jump >= Math.PI) { G.jump = 0; player.position.y = 0; }
+    }
+
+    // animation des jambes / pales
+    if (player.userData.limbs) {
+      const l = player.userData.limbs;
+      const s = Math.sin(elapsed * 12);
+      l.legL.rotation.x = s * 0.8;
+      l.legR.rotation.x = -s * 0.8;
+      l.armL.rotation.x = -s * 0.7;
+      l.armR.rotation.x = s * 0.7;
+    }
+    if (player.userData.rotor) player.userData.rotor.rotation.y += dt * 22;
+
+    // décor qui défile
+    world.children.forEach((ch) => {
+      if (ch === player || ch === targetModel || ch === G.cop) return;
+      if (ch.userData.isObstacle) return;
+      ch.position.z += v * dt;
+      if (ch.position.z > 40) ch.position.z -= 340;
+    });
+
+    // cible
+    if (targetModel) {
+      const rest = Math.max(0, cfg.length - G.dist);
+      targetModel.position.z = -8 - Math.min(38, rest * 0.14);
+      targetModel.position.x = Math.sin(elapsed * 1.4) * 0.9;
+      if (targetModel.userData.rotor) targetModel.userData.rotor.rotation.y += dt * 20;
+      if (rest <= 4) levelComplete();
+    }
+
+    // policière qui gagne du terrain si on ralentit
+    if (G.cop) {
+      const slow = v < cfg.speed * 0.9;
+      G.cop.position.z += (slow ? 1.7 : -1.5) * dt;
+      G.cop.position.z = Math.max(4.8, Math.min(7.6, G.cop.position.z));
+      G.cop.position.x += (player.position.x * 0.7 - G.cop.position.x) * dt * 2.4;
+      if (G.cop.position.z > 7.35) hurt();
+    }
+
+    // obstacles
+    G.obstacleTimer -= dt;
+    if (G.obstacleTimer <= 0) {
+      spawnObstacle(cfg);
+      G.obstacleTimer = Math.max(0.55, 1.5 - G.level * 0.12) + Math.random() * 0.7;
+    }
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      const o = obstacles[i];
+      o.position.z += v * dt;
+      if (o.userData.type === "bird") {
+        o.position.y = 3.0 + Math.sin(elapsed * 2 + o.userData.phase) * 0.7;
+        o.position.x = LANES[o.userData.lane] + Math.sin(elapsed * 1.6 + o.userData.phase) * 0.5;
+      }
+      if (o.position.z > 14) {
+        world.remove(o);
+        obstacles.splice(i, 1);
+        continue;
+      }
+      const dz = Math.abs(o.position.z);
+      const dx = Math.abs(o.position.x - player.position.x);
+      if (dz < 1.5 && dx < 1.25) {
+        const highEnough = player.position.y > 1.5;
+        const isAir = o.userData.type === "bird";
+        if (isAir ? player.position.y > 1.6 && player.position.y < 4.6 : !highEnough) {
+          hurt();
+          world.remove(o);
+          obstacles.splice(i, 1);
+        }
+      }
+    }
+
+    if (G.hurt > 0) G.hurt -= dt;
+    if (G.dist >= cfg.length + 30) levelComplete();
+    updateHUD();
+  }
+
+  // caméra
+  const camY = G.scene === "play" ? 4.6 : 5.2;
+  camera.position.x += (player ? player.position.x * 0.55 : 0 - camera.position.x) * 0.08;
+  camera.position.y += (camY - camera.position.y) * 0.06;
+  camera.lookAt(player ? player.position.x * 0.4 : 0, 1.5, -12);
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+// ---------- lancement ----------
+scene.background = new THREE.Color(0x9fd6b4);
+clearWorld();
+player = makeTovo();
+player.position.set(0, 0, 0);
+world.add(player);
+targetModel = null;
+showStory();
+tick();
+
+// service worker (hors ligne)
+if ("serviceWorker" in navigator) {
+  addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
+
+</script>
+</body>
+</html>
